@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { FileText, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
+import { CategoryBadge } from "@/components/documents/category-badge";
 import { listDocuments, uploadDocument } from "@/lib/api/documents";
 import { ApiError } from "@/lib/api/client";
 import { formatBytes, formatDateTime } from "@/lib/format";
@@ -120,7 +122,9 @@ export default function DocumentsPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Category</TableHead>
               <TableHead>Type</TableHead>
+              <TableHead>Pages</TableHead>
               <TableHead>Size</TableHead>
               <TableHead>Uploaded</TableHead>
             </TableRow>
@@ -129,7 +133,7 @@ export default function DocumentsPage() {
             {documents === null &&
               Array.from({ length: 3 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
@@ -137,7 +141,7 @@ export default function DocumentsPage() {
 
             {documents !== null && documents.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                   No documents yet. Upload your first document to get started.
                 </TableCell>
               </TableRow>
@@ -145,14 +149,22 @@ export default function DocumentsPage() {
 
             {documents?.map((doc) => (
               <TableRow key={doc.id}>
-                <TableCell className="max-w-xs truncate font-medium">{doc.original_filename}</TableCell>
+                <TableCell className="max-w-xs truncate font-medium">
+                  <Link href={`/documents/${doc.id}`} className="hover:underline">
+                    {doc.original_filename}
+                  </Link>
+                </TableCell>
                 <TableCell>
                   <DocumentStatusBadge status={doc.status} />
                   {doc.status === "FAILED" && doc.error_message && (
                     <p className="mt-1 max-w-xs truncate text-xs text-destructive">{doc.error_message}</p>
                   )}
                 </TableCell>
+                <TableCell>
+                  <CategoryBadge category={doc.category} />
+                </TableCell>
                 <TableCell className="text-muted-foreground">{doc.file_type}</TableCell>
+                <TableCell className="text-muted-foreground">{doc.page_count ?? "–"}</TableCell>
                 <TableCell className="text-muted-foreground">{formatBytes(doc.file_size)}</TableCell>
                 <TableCell className="text-muted-foreground">{formatDateTime(doc.created_at)}</TableCell>
               </TableRow>

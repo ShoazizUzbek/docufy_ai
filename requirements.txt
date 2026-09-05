@@ -9,3 +9,33 @@ boto3==1.34.162
 celery==5.4.0
 redis==5.0.8
 Pillow==10.4.0
+
+# Document processing (Phase 2)
+PyMuPDF==1.28.2
+python-docx==1.2.0
+setuptools  # paddle imports this at runtime; not preinstalled in Python 3.12 venvs
+# numpy/opencv: paddleocr==2.7.3 pins opencv-python/-contrib-python<=4.6.0.66,
+# which is numpy<2 ABI-only. Left unpinned, pip resolves numpy>=2 (via other
+# deps) and opencv-python-headless>=2 (pulled in by paddleocr's own pdf2docx
+# dependency), which crashes on import (numpy ABI mismatch). Pin all four
+# together so the whole opencv family agrees on one numpy ABI.
+numpy==1.26.4
+opencv-python==4.6.0.66
+opencv-contrib-python==4.6.0.66
+opencv-python-headless==4.6.0.66
+paddlepaddle==2.6.2
+paddleocr==2.7.3
+
+# Search & retrieval (Phase 3)
+# CPU-only torch build — the default PyPI wheel bundles CUDA libs (multi-GB).
+# >=2.6 required: transformers refuses torch.load on <2.6 (CVE-2025-32434).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0
+sentence-transformers==3.3.1
+qdrant-client==1.11.3
+
+# RAG & AI answers (Phase 4)
+# requests is already pulled in transitively (huggingface_hub etc.), listed
+# explicitly here since ai_gateway/openai_compatible.py depends on it directly.
+requests==2.34.2
+anthropic==1.3.0

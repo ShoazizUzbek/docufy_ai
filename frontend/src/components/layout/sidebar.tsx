@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -69,9 +70,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             )}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel className="truncate text-xs text-muted-foreground">
-              {user?.email}
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="truncate text-xs text-muted-foreground">
+                {user?.email}
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={logout}>Sign out</DropdownMenuItem>
           </DropdownMenuContent>

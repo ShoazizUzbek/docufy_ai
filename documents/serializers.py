@@ -2,7 +2,7 @@ import os
 
 from rest_framework import serializers
 
-from .models import Document
+from .models import Chunk, Document
 
 EXTENSION_TO_FILE_TYPE = {
     '.pdf': Document.FileType.PDF,
@@ -24,10 +24,22 @@ class DocumentSerializer(serializers.ModelSerializer):
         model = Document
         fields = [
             'id', 'original_filename', 'file_type', 'mime_type', 'file_size',
-            'status', 'error_message', 'page_count', 'uploaded_by_email',
-            'created_at', 'updated_at',
+            'status', 'error_message', 'page_count', 'category', 'entities',
+            'uploaded_by_email', 'created_at', 'updated_at',
         ]
         read_only_fields = fields
+
+
+class ChunkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Chunk
+        fields = ['id', 'index', 'page_number', 'section_heading', 'hierarchy_path', 'text']
+        read_only_fields = fields
+
+
+class DocumentPageSerializer(serializers.Serializer):
+    page_number = serializers.IntegerField(allow_null=True)
+    chunks = ChunkSerializer(many=True)
 
 
 class DocumentUploadSerializer(serializers.ModelSerializer):
