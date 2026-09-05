@@ -1,3 +1,17 @@
+# Backend (Django) and Celery run in containers on the same network as
+# postgres/redis/minio/qdrant below, so they reach them via service name
+# and internal port (e.g. "postgres:5432"), not the host-remapped ports
+# used for connecting from outside Docker. `.env` keeps host/native
+# defaults (localhost + remapped ports) for anyone running manage.py
+# directly on the host; these overrides only apply inside the containers.
+x-backend-env: &backend-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  MINIO_ENDPOINT_URL: http://minio:9000
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  QDRANT_URL: http://qdrant:6333
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -54,7 +68,55 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  backend:
+    build: .
+    restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+      - huggingface_cache:/root/.cache/huggingface
+      - paddleocr_cache:/root/.paddleocr
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  celery:
+    build: .
+    restart: unless-stopped
+    command: celery -A docufy_ai worker -l info
+    volumes:
+      - .:/app
+      - huggingface_cache:/root/.cache/huggingface
+      - paddleocr_cache:/root/.paddleocr
+    env_file:
+      - .env
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
 volumes:
   postgres_data:
   minio_data:
   qdrant_data:
+  huggingface_cache:
+  paddleocr_cache:

@@ -41,7 +41,8 @@ docufy_ai/
 ├── ask_ai/               # RAG endpoint (POST /api/ask/) — rag.py has the retrieve+prompt+parse
 │                          #   logic, accepts an optional document_id scope — Phase 4/5
 ├── requirements.txt
-├── docker-compose.yml    # postgres, redis, minio, qdrant
+├── Dockerfile            # image shared by the backend + celery services
+├── docker-compose.yml    # postgres, redis, minio, qdrant, backend, celery (frontend stays native)
 ├── .env.example          # backend env vars
 ├── manage.py
 └── frontend/              # Next.js app
@@ -118,36 +119,45 @@ passage view's "Open full document" link, which reloads the metadata panel).
 
 ## Running locally
 
-**1. Infra (Docker Compose)** — postgres, redis, minio, qdrant. Backend, Celery, and the frontend run natively on the host.
+**1. Backend, Celery & infra (Docker Compose)** — postgres, redis, minio,
+qdrant, `backend` (Django), and `celery` all run in containers. Only the
+frontend runs natively on the host.
 
 ```bash
-docker compose up -d
+cp .env.example .env
+docker compose up -d --build
+docker compose exec backend python manage.py migrate
+docker compose exec backend python manage.py seed_demo   # demo org + admin user + MinIO bucket
 ```
 
-Ports are remapped from the Docker defaults to avoid clashing with a host
-Postgres/Redis: Postgres → `localhost:5435`, Redis → `localhost:6380`. MinIO is
-on `:9000` (API) / `:9001` (console), Qdrant on `:6333`.
+First build pulls several GB (torch/paddlepaddle/sentence-transformers) —
+slow once, cached after. Host-side ports (only relevant for tools running
+outside Docker, or the native fallback below) are remapped from Docker
+defaults to avoid clashing with a host Postgres/Redis: Postgres →
+`localhost:5435`, Redis → `localhost:6380`. MinIO is on `:9000` (API) /
+`:9001` (console), Qdrant on `:6333`, Django on `:8000`. Inside the
+Docker network, `backend`/`celery` reach the others via service name and
+*internal* port (`postgres:5432`, `redis:6379`, etc. — see the
+`x-backend-env` anchor in `docker-compose.yml`), not these remapped ones.
 
-**2. Backend**
+Demo login: `admin@docufy.ai` / `ChangeMe123!`. Tests:
+`docker compose exec backend python manage.py test`. Logs:
+`docker compose logs -f backend celery`.
 
-```bash
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env        # defaults already match docker-compose.yml
-python manage.py migrate
-python manage.py seed_demo   # creates demo org + admin user + MinIO bucket
-python manage.py runserver
-```
+Django autoreloads on code change (bind-mounted + `runserver`'s own
+reloader); **Celery does not** — `docker compose restart celery` after
+changing task code. Both containers read `.env` once at startup, so
+`docker compose restart backend celery` after changing it (e.g. switching
+`AI_GATEWAY_PROVIDER`).
 
-Demo login: `admin@docufy.ai` / `ChangeMe123!`. Tests: `python manage.py test`.
+Running Django/Celery natively instead (e.g. for IDE debugging) still
+works — `.env`'s defaults already assume that mode (localhost + the
+remapped ports above); just run `docker compose up -d postgres redis
+minio qdrant` (skip `backend`/`celery`) and then the usual
+`venv` + `pip install -r requirements.txt` + `manage.py runserver` /
+`celery -A docufy_ai worker -l info` locally.
 
-**3. Celery worker** (Phase 2+ — needed for document processing to run)
-
-```bash
-celery -A docufy_ai worker -l info
-```
-
-**4. Frontend**
+**2. Frontend**
 
 ```bash
 cd frontend

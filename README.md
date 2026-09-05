@@ -14,54 +14,78 @@ citations back to the exact source page/section.
 
 ## Local dev setup
 
-### 1. Infrastructure (Docker Compose)
+### 1. Backend, Celery & infrastructure (Docker Compose)
 
-Postgres, Redis, MinIO, and Qdrant run in Docker. The Django server, Celery
-worker, and Next.js dev server run natively on the host for fast iteration.
+Postgres, Redis, MinIO, Qdrant, the Django server, and the Celery worker
+all run in Docker. Only the Next.js frontend runs natively on the host
+(fast HMR matters more there, and it has no heavy system dependencies to
+containerize in the first place).
 
 ```bash
-docker compose up -d
+cp .env.example .env
+docker compose up -d --build
 ```
 
-This starts:
-- Postgres on `localhost:5435` (remapped from 5432 to avoid clashing with a host Postgres install)
-- Redis on `localhost:6380` (remapped from 6379)
-- MinIO on `localhost:9000` (API) / `localhost:9001` (console, user `docufy_minio` / `docufy_minio_secret`)
-- Qdrant on `localhost:6333`
+The first build pulls PyTorch/PaddlePaddle/sentence-transformers — several
+GB — so it takes a while once. Rebuilds after that only rerun if
+`requirements.txt` changes (Docker layer caching).
 
-### 2. Backend
+This starts:
+- Postgres, reachable from the **host** at `localhost:5435` (remapped from
+  5432 — containers reach it internally as `postgres:5432`, see the
+  `x-backend-env` anchor in `docker-compose.yml`)
+- Redis, host `localhost:6380` (internally `redis:6379`)
+- MinIO API `localhost:9000`, console `localhost:9001` (user `docufy_minio` / `docufy_minio_secret`)
+- Qdrant `localhost:6333`
+- Django on `localhost:8000`
+- The Celery worker (no exposed port — it just processes queued tasks)
+
+One-time setup, once containers are up:
+
+```bash
+docker compose exec backend python manage.py migrate
+docker compose exec backend python manage.py seed_demo   # demo org, admin user, MinIO bucket
+```
+
+Demo login: `admin@docufy.ai` / `ChangeMe123!`
+
+```bash
+docker compose logs -f backend celery   # tail logs
+docker compose exec backend python manage.py test   # run backend tests
+```
+
+Django's code is bind-mounted into the container and `runserver`
+autoreloads on change, same as running it natively. **Celery does not
+autoreload** — restart it after changing task code:
+`docker compose restart celery`. Both `backend` and `celery` read `.env`
+once at container start, so restart both after changing it:
+`docker compose restart backend celery`.
+
+<details>
+<summary>Alternative: running Django/Celery natively instead of in Docker</summary>
+
+Useful for IDE-integrated debugging. `.env`'s defaults (`localhost` +
+the remapped ports above) already assume this mode — no edits needed as
+long as `docker compose up -d postgres redis minio qdrant` is running
+(skip `backend`/`celery` from that command, or just leave them out and
+run these instead):
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env      # defaults already match docker-compose.yml
 python manage.py migrate
-python manage.py seed_demo   # creates demo org, admin user, and MinIO bucket
+python manage.py seed_demo
 python manage.py runserver
 ```
 
-Demo login: `admin@docufy.ai` / `ChangeMe123!`
-
-Run backend tests:
-
 ```bash
-python manage.py test
+celery -A docufy_ai worker -l info   # separate terminal, same venv
 ```
 
-### 3. Celery worker (Phase 2+)
+</details>
 
-Document processing (text extraction, OCR, chunking) runs as a Celery task.
-In a separate terminal, with the venv activated:
-
-```bash
-celery -A docufy_ai worker -l info
-```
-
-Without a running worker, uploaded documents stay `UPLOADED` — the task
-sits queued in Redis until a worker picks it up.
-
-### 4. Frontend
+### 2. Frontend
 
 ```bash
 cd frontend
