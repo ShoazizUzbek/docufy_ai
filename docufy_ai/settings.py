@@ -28,6 +28,16 @@ def env_list(key, default=''):
     return [item.strip() for item in value.split(',') if item.strip()]
 
 
+def env_int(key, default):
+    value = os.environ.get(key)
+    return int(value) if value else default
+
+
+def env_float(key, default):
+    value = os.environ.get(key)
+    return float(value) if value else default
+
+
 SECRET_KEY = env('DJANGO_SECRET_KEY', 'django-insecure-dev-only-change-me')
 DEBUG = env_bool('DJANGO_DEBUG', True)
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1')
@@ -46,6 +56,8 @@ INSTALLED_APPS = [
 
     'core',
     'documents',
+    'search',
+    'ask_ai',
 ]
 
 MIDDLEWARE = [
@@ -172,14 +184,40 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
-# Qdrant (used from Phase 3 onward)
+# Document processing (Phase 2)
+
+# Language packs to try during OCR — PaddleOCR has no single "auto" mode,
+# so we run each configured language and keep the best-scoring result.
+# 'en' covers Uzbek's Latin script reasonably well; there's no dedicated
+# Uzbek model, so this is a best-effort approximation, not true UZ OCR.
+OCR_LANGUAGES = env_list('OCR_LANGUAGES', 'en,ru')
+
+# Search & retrieval (Phase 3)
 
 QDRANT_URL = env('QDRANT_URL', 'http://localhost:6333')
 QDRANT_API_KEY = env('QDRANT_API_KEY', '')
+QDRANT_COLLECTION_NAME = env('QDRANT_COLLECTION_NAME', 'docufy_chunks')
 
-# AI Gateway (used from Phase 4 onward)
+# BGE-M3: multilingual (100+ languages incl. Uzbek/Russian/English), 1024-dim
+# dense embeddings. Loaded lazily on first use — see documents/processing/embeddings.py.
+EMBEDDING_MODEL_NAME = env('EMBEDDING_MODEL_NAME', 'BAAI/bge-m3')
+EMBEDDING_DIMENSION = 1024
 
+# AI Gateway & RAG (Phase 4)
+
+# 'anthropic' (Claude API) or 'ollama' (local model, e.g. Qwen/Gemma via
+# Ollama's OpenAI-compatible endpoint) — see ai_gateway/. AI_GATEWAY_MODEL
+# left blank uses each client's own sensible default.
+AI_GATEWAY_PROVIDER = env('AI_GATEWAY_PROVIDER', 'anthropic')
 AI_GATEWAY_API_KEY = env('AI_GATEWAY_API_KEY', '')
 AI_GATEWAY_BASE_URL = env('AI_GATEWAY_BASE_URL', '')
 AI_GATEWAY_MODEL = env('AI_GATEWAY_MODEL', '')
+
+# How many chunks to retrieve per question, and the minimum similarity
+# score a top result must clear before we bother asking the LLM at all
+# (below this, we skip the LLM call and return the low-confidence fallback
+# directly — cheaper and avoids inviting a hallucinated answer).
+RAG_TOP_K = env_int('RAG_TOP_K', 5)
+RAG_MIN_SCORE = env_float('RAG_MIN_SCORE', 0.3)
